@@ -14,7 +14,7 @@ app.use(
   cors({
     origin: "http://localhost:3000",
     methods: ["POST", "GET"],
-    allowedHeaders: ["Content-Type"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
@@ -95,7 +95,7 @@ app.post("/api/register", async (req, res) => {
   );
 });
 
-// Маршрут для авторизации пользователей
+// Маршрут для авторизации пользователей и администратора  
 router.post("/login", (req, res) => {
   const { email, password } = req.body;
 
@@ -133,7 +133,7 @@ router.post("/login", (req, res) => {
           token_admin: user.token_admin, // Роль пользователя
         },
         SECRET_KEY,
-        { expiresIn: "1h" } // Время жизни токена
+        { expiresIn: "1y" } // Время жизни токена
       );
 
       res.status(200).json({
@@ -179,6 +179,96 @@ router.post("/admin", (req, res) => {
     }
     console.log(`Роль пользователя: ${user.token_admin === 2 ? 'Администратор' : 'Пользователь'}`);
   });
+
+  router.post("/check-email", (req, res) => {
+    const { email } = req.body;
+  
+    if (!email) {
+      return res.status(400).json({ message: "Email не предоставлен." });
+    }
+  
+    db.query("SELECT * FROM users WHERE email = ?", [email], (err, results) => {
+      if (err) {
+        return res.status(500).json({ message: "Ошибка сервера.", error: err });
+      }
+  
+      if (results.length === 0) {
+        return res.status(404).json({ message: "Email не найден.", exists: false });
+      }
+  
+      return res.status(200).json({ message: "Email найден.", exists: true });
+    });
+  });
+
+//изменение пароля 
+router.post("/change-password", (req, res) => {
+  const authHeader = req.headers.authorization;
+  const { email, password } = req.body;
+
+  if (!authHeader) {
+    return res.status(401).json({ message: "Токен не предоставлен" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, SECRET_KEY);
+    const userId = decoded.id;
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        message: "Пароль должен содержать минимум 6 символов.",
+      });
+    }
+
+    // Проверяем, что email соответствует записи в базе
+    db.query(
+      "SELECT * FROM users WHERE id = ? AND email = ?",
+      [userId, email],
+      (err, results) => {
+        if (err) {
+          return res
+            .status(500)
+            .json({ message: "Ошибка при проверке пользователя", error: err });
+        }
+
+        if (results.length === 0) {
+          return res
+            .status(400)
+            .json({ message: "Неверный email или пользователь не найден." });
+        }
+
+        // Хэшируем новый пароль
+        bcrypt.hash(password, 10, (err, hashedPassword) => {
+          if (err) {
+            return res
+              .status(500)
+              .json({ message: "Ошибка при хэшировании пароля", error: err });
+          }
+
+          // Обновляем пароль в базе данных
+          db.query(
+            "UPDATE users SET password = ? WHERE id = ?",
+            [hashedPassword, userId],
+            (err, result) => {
+              if (err) {
+                return res
+                  .status(500)
+                  .json({ message: "Ошибка при обновлении пароля", error: err });
+              }
+
+              res.status(200).json({ message: "Пароль успешно изменен." });
+            }
+          );
+        });
+      }
+    );
+  } catch (err) {
+    console.error("Ошибка при верификации токена:", err);
+    res.status(401).json({ message: "Неверный токен", error: err });
+  }
+});
+
 
 app.use("/api", router);
 // Запуск сервера
