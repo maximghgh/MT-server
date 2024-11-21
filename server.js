@@ -202,29 +202,26 @@ router.post("/admin", (req, res) => {
 
 //изменение пароля 
 router.post("/change-password", (req, res) => {
-  const authHeader = req.headers.authorization;
   const { email, password } = req.body;
 
-  if (!authHeader) {
-    return res.status(401).json({ message: "Токен не предоставлен" });
-  }
-
-  const token = authHeader.split(" ")[1];
-
   try {
-    const decoded = jwt.verify(token, SECRET_KEY);
-    const userId = decoded.id;
+    // Проверка: заполнены ли поля и длина пароля
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "Пожалуйста, заполните все поля.",
+      });
+    }
 
-    if (!password || password.length < 6) {
+    if (password.length < 6) {
       return res.status(400).json({
         message: "Пароль должен содержать минимум 6 символов.",
       });
     }
 
-    // Проверяем, что email соответствует записи в базе
+    // Проверяем, существует ли пользователь с указанным email
     db.query(
-      "SELECT * FROM users WHERE id = ? AND email = ?",
-      [userId, email],
+      "SELECT * FROM users WHERE email = ?",
+      [email],
       (err, results) => {
         if (err) {
           return res
@@ -235,7 +232,7 @@ router.post("/change-password", (req, res) => {
         if (results.length === 0) {
           return res
             .status(400)
-            .json({ message: "Неверный email или пользователь не найден." });
+            .json({ message: "Пользователь с указанным email не найден." });
         }
 
         // Хэшируем новый пароль
@@ -248,8 +245,8 @@ router.post("/change-password", (req, res) => {
 
           // Обновляем пароль в базе данных
           db.query(
-            "UPDATE users SET password = ? WHERE id = ?",
-            [hashedPassword, userId],
+            "UPDATE users SET password = ? WHERE email = ?",
+            [hashedPassword, email],
             (err, result) => {
               if (err) {
                 return res
@@ -264,8 +261,8 @@ router.post("/change-password", (req, res) => {
       }
     );
   } catch (err) {
-    console.error("Ошибка при верификации токена:", err);
-    res.status(401).json({ message: "Неверный токен", error: err });
+    console.error("Ошибка на сервере:", err);
+    res.status(500).json({ message: "Произошла ошибка на сервере.", error: err });
   }
 });
 
