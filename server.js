@@ -80,9 +80,9 @@ app.post("/api/register", async (req, res) => {
               error: err,
             });
           }
-          console.log('Результат запроса:', result);  // Логируем результат запроса в базу
-          console.log('Добавлен новый пользователь с email:', email);  // Логируем email добавленного пользователя
-          console.log('Токен администратора:', 1);
+          console.log("Результат запроса:", result); // Логируем результат запроса в базу
+          console.log("Добавлен новый пользователь с email:", email); // Логируем email добавленного пользователя
+          console.log("Токен администратора:", 1);
 
           res.status(200).json({ message: "Регистрация прошла успешно" });
         });
@@ -95,7 +95,7 @@ app.post("/api/register", async (req, res) => {
   );
 });
 
-// Маршрут для авторизации пользователей и администратора  
+// Маршрут для авторизации пользователей и администратора
 router.post("/login", (req, res) => {
   const { email, password } = req.body;
 
@@ -145,62 +145,72 @@ router.post("/login", (req, res) => {
 
       console.log(`Токен:`, token);
       console.log(`почта`, email);
-      console.log(`Роль пользователя: ${user.token_admin == 2 ? 'Администратор' : 'Пользователь'}`);
+      console.log(
+        `Роль пользователя: ${
+          user.token_admin == 2 ? "Администратор" : "Пользователь"
+        }`
+      );
     }
   );
 });
 
 // Маршрут для проверки администратора
 router.post("/admin", (req, res) => {
-    const authHeader = req.headers.authorization;
-  
-    if (!authHeader) {
-      return res.status(401).json({ message: "Токен не предоставлен" });
-    }
-  
-    const token = authHeader.split(" ")[1];
-    console.log(`Токен:`, token); // Выводим токен в консоль для проверки
-  
-    try {
-      const decoded = jwt.verify(token, SECRET_KEY);
-      console.log("Декодированный токен:", decoded); // Выводим декодированное содержимое токена
-  
-      if (decoded.token_admin !== 2) {
-        console.log("Ошибка доступа: Недостаточно прав"); // Выводим ошибку, если это не админ
-        return res.status(403).json({ message: "Доступ запрещен" });
-      }
-  
-      // Если роль администратора проверена успешно
-      console.log(`Привет, админ!`); // Приветствие в консоль
-      res.status(200).json({ message: "Добро пожаловать, администратор!" });
-    } catch (err) {
-      console.error("Ошибка при верификации токена:", err); // Выводим ошибку при верификации
-      res.status(401).json({ message: `Неверный токен`, error: err });
-    }
-    console.log(`Роль пользователя: ${user.token_admin === 2 ? 'Администратор' : 'Пользователь'}`);
-  });
+  const authHeader = req.headers.authorization;
 
-  router.post("/check-email", (req, res) => {
-    const { email } = req.body;
-  
-    if (!email) {
-      return res.status(400).json({ message: "Email не предоставлен." });
-    }
-  
-    db.query("SELECT * FROM users WHERE email = ?", [email], (err, results) => {
-      if (err) {
-        return res.status(500).json({ message: "Ошибка сервера.", error: err });
-      }
-  
-      if (results.length === 0) {
-        return res.status(404).json({ message: "Email не найден.", exists: false });
-      }
-  
-      return res.status(200).json({ message: "Email найден.", exists: true });
-    });
-  });
+  if (!authHeader) {
+    return res.status(401).json({ message: "Токен не предоставлен" });
+  }
 
-//изменение пароля 
+  const token = authHeader.split(" ")[1];
+  console.log(`Токен:`, token); // Выводим токен в консоль для проверки
+
+  try {
+    const decoded = jwt.verify(token, SECRET_KEY);
+    console.log("Декодированный токен:", decoded); // Выводим декодированное содержимое токена
+
+    if (decoded.token_admin !== 2) {
+      console.log("Ошибка доступа: Недостаточно прав"); // Выводим ошибку, если это не админ
+      return res.status(403).json({ message: "Доступ запрещен" });
+    }
+
+    // Если роль администратора проверена успешно
+    console.log(`Привет, админ!`); // Приветствие в консоль
+    res.status(200).json({ message: "Добро пожаловать, администратор!" });
+  } catch (err) {
+    console.error("Ошибка при верификации токена:", err); // Выводим ошибку при верификации
+    res.status(401).json({ message: `Неверный токен`, error: err });
+  }
+  console.log(
+    `Роль пользователя: ${
+      user.token_admin === 2 ? "Администратор" : "Пользователь"
+    }`
+  );
+});
+
+router.post("/check-email", (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: "Email не предоставлен." });
+  }
+
+  db.query("SELECT * FROM users WHERE email = ?", [email], (err, results) => {
+    if (err) {
+      return res.status(500).json({ message: "Ошибка сервера.", error: err });
+    }
+
+    if (results.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Email не найден.", exists: false });
+    }
+
+    return res.status(200).json({ message: "Email найден.", exists: true });
+  });
+});
+
+//изменение пароля
 router.post("/change-password", (req, res) => {
   const { email, password } = req.body;
 
@@ -219,50 +229,48 @@ router.post("/change-password", (req, res) => {
     }
 
     // Проверяем, существует ли пользователь с указанным email
-    db.query(
-      "SELECT * FROM users WHERE email = ?",
-      [email],
-      (err, results) => {
+    db.query("SELECT * FROM users WHERE email = ?", [email], (err, results) => {
+      if (err) {
+        return res
+          .status(500)
+          .json({ message: "Ошибка при проверке пользователя", error: err });
+      }
+
+      if (results.length === 0) {
+        return res
+          .status(400)
+          .json({ message: "Пользователь с указанным email не найден." });
+      }
+
+      // Хэшируем новый пароль
+      bcrypt.hash(password, 10, (err, hashedPassword) => {
         if (err) {
           return res
             .status(500)
-            .json({ message: "Ошибка при проверке пользователя", error: err });
+            .json({ message: "Ошибка при хэшировании пароля", error: err });
         }
 
-        if (results.length === 0) {
-          return res
-            .status(400)
-            .json({ message: "Пользователь с указанным email не найден." });
-        }
-
-        // Хэшируем новый пароль
-        bcrypt.hash(password, 10, (err, hashedPassword) => {
-          if (err) {
-            return res
-              .status(500)
-              .json({ message: "Ошибка при хэшировании пароля", error: err });
-          }
-
-          // Обновляем пароль в базе данных
-          db.query(
-            "UPDATE users SET password = ? WHERE email = ?",
-            [hashedPassword, email],
-            (err, result) => {
-              if (err) {
-                return res
-                  .status(500)
-                  .json({ message: "Ошибка при обновлении пароля", error: err });
-              }
-
-              res.status(200).json({ message: "Пароль успешно изменен." });
+        // Обновляем пароль в базе данных
+        db.query(
+          "UPDATE users SET password = ? WHERE email = ?",
+          [hashedPassword, email],
+          (err, result) => {
+            if (err) {
+              return res
+                .status(500)
+                .json({ message: "Ошибка при обновлении пароля", error: err });
             }
-          );
-        });
-      }
-    );
+
+            res.status(200).json({ message: "Пароль успешно изменен." });
+          }
+        );
+      });
+    });
   } catch (err) {
     console.error("Ошибка на сервере:", err);
-    res.status(500).json({ message: "Произошла ошибка на сервере.", error: err });
+    res
+      .status(500)
+      .json({ message: "Произошла ошибка на сервере.", error: err });
   }
 });
 
@@ -271,30 +279,64 @@ router.post("/change-password", (req, res) => {
 router.post("/questions", async (req, res) => {
   const { name, phone, email, description } = req.body;
 
-  // Проверяем, что все обязательные поля заполнены
   if (!name || !phone || !email || !description) {
     return res.status(400).json({ message: "Заполните обязательные поля" });
   }
 
-  // Проверка формата email
   const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
   if (!emailPattern.test(email)) {
-    return res.status(400).json({ message: "Пожалуйста, введите корректный email" });
+    return res
+      .status(400)
+      .json({ message: "Пожалуйста, введите корректный email" });
   }
 
-  // Вставляем данные в базу данных
-  const query = "INSERT INTO questions (name, phone, email, description) VALUES (?, ?, ?, ?)";
-  
-  db.query(query, [name, phone, email, description], (err, result) => {
-    if (err) {
-      console.error("Ошибка при сохранении данных:", err);
-      return res.status(500).json({ message: "Ошибка сервера" });
-    }
+  try {
+    const [result] = await pool.execute(
+      "INSERT INTO questions (name, phone, email, description) VALUES (?, ?, ?, ?)",
+      [name, phone, email, description]
+    );
 
-    res.status(201).json({ message: "Данные успешно сохранены", id: result.insertId });
-  });
+    res
+      .status(201)
+      .json({ message: "Данные успешно сохранены", id: result.insertId });
+  } catch (error) {
+    console.error("Ошибка при сохранении данных:", error);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+//вывод пользователей
+router.get("/users", (req, res) => {
+  // Запрос к базе данных для получения всех пользователей
+  db.query(
+    "SELECT id, email, token_admin, created_at FROM users",
+    (err, results) => {
+      if (err) {
+        console.error("Ошибка при получении данных пользователей:", err);
+        return res.status(500).json({ message: "Ошибка сервера" });
+      }
+
+      // Отправляем список пользователей на клиентскую часть
+      res.status(200).json({ users: results });
+    }
+  );
 });
 
+// вывод вопросов пользователей
+router.get("/question", (req, res) => {
+  db.query(
+    "SELECT id, name, email, phone, description, created_at FROM questions",
+    (err, results) => {
+      if (err) {
+        console.error("Ошибка при получении данных из questions:", err);
+        return res.status(500).json({
+          message: "Ошибка при получении данных",
+          error: err,
+        });
+      }
+      res.status(200).json({ questions: results });
+    }
+  );
+});
 
 app.use("/api", router);
 // Запуск сервера
