@@ -266,6 +266,35 @@ router.post("/change-password", (req, res) => {
   }
 });
 
+//форма отправки вопросов клиентов
+
+router.post("/questions", async (req, res) => {
+  const { name, phone, email, description } = req.body;
+
+  // Проверяем, что все обязательные поля заполнены
+  if (!name || !phone || !email || !description) {
+    return res.status(400).json({ message: "Заполните обязательные поля" });
+  }
+
+  // Проверка формата email
+  const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!emailPattern.test(email)) {
+    return res.status(400).json({ message: "Пожалуйста, введите корректный email" });
+  }
+
+  // Вставляем данные в базу данных
+  const query = "INSERT INTO questions (name, phone, email, description) VALUES (?, ?, ?, ?)";
+  
+  db.query(query, [name, phone, email, description], (err, result) => {
+    if (err) {
+      console.error("Ошибка при сохранении данных:", err);
+      return res.status(500).json({ message: "Ошибка сервера" });
+    }
+
+    res.status(201).json({ message: "Данные успешно сохранены", id: result.insertId });
+  });
+});
+
 
 app.use("/api", router);
 // Запуск сервера
