@@ -276,34 +276,33 @@ router.post("/change-password", (req, res) => {
 
 //форма отправки вопросов клиентов
 
-router.post("/questions", async (req, res) => {
+// Маршрут для отправки вопросов клиентов
+router.post("/questions", (req, res) => {
   const { name, phone, email, description } = req.body;
 
   if (!name || !phone || !email || !description) {
     return res.status(400).json({ message: "Заполните обязательные поля" });
   }
 
+  // Регулярное выражение для проверки правильности email
   const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
   if (!emailPattern.test(email)) {
-    return res
-      .status(400)
-      .json({ message: "Пожалуйста, введите корректный email" });
+    return res.status(400).json({ message: "Пожалуйста, введите корректный email" });
   }
 
-  try {
-    const [result] = await pool.execute(
-      "INSERT INTO questions (name, phone, email, description) VALUES (?, ?, ?, ?)",
-      [name, phone, email, description]
-    );
+  // Запрос на вставку данных в таблицу вопросов
+  const query = "INSERT INTO questions (name, phone, email, description) VALUES (?, ?, ?, ?)";
+  db.query(query, [name, phone, email, description], (err, results) => {
+    if (err) {
+      console.error("Ошибка при сохранении данных:", err);
+      return res.status(500).json({ message: "Ошибка сервера" });
+    }
 
-    res
-      .status(201)
-      .json({ message: "Данные успешно сохранены", id: result.insertId });
-  } catch (error) {
-    console.error("Ошибка при сохранении данных:", error);
-    res.status(500).json({ message: "Ошибка сервера" });
-  }
+    // Если запрос выполнен успешно, отправляем ответ с успешным результатом
+    res.status(201).json({ message: "Данные успешно сохранены", id: results.insertId });
+  });
 });
+
 //вывод пользователей
 router.get("/users", (req, res) => {
   // Запрос к базе данных для получения всех пользователей
