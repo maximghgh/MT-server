@@ -4,10 +4,14 @@ const bcrypt = require("bcryptjs");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const jwt = require("jsonwebtoken"); // Для создания токенов
+const helmet = require("helmet");
 
 const app = express();
 const router = express.Router();
 const SECRET_KEY = "your_secret_key"; // Секретный ключ для JWT
+
+// Использование Helmet для защиты сайта
+app.use(helmet());
 
 // Настраиваем CORS для разрешения запросов только с http://localhost:3000
 app.use(
