@@ -5,13 +5,15 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const jwt = require("jsonwebtoken"); // Для создания токенов
 const helmet = require("helmet");
-
+const { Sequelize, DataTypes } = require("sequelize");
 const app = express();
 const router = express.Router();
 const SECRET_KEY = "your_secret_key"; // Секретный ключ для JWT
 
 // Использование Helmet для защиты сайта
 app.use(helmet());
+app.use(express.json());
+app.use(bodyParser.json());
 
 // Настраиваем CORS для разрешения запросов только с http://localhost:3000
 app.use(
@@ -22,24 +24,68 @@ app.use(
   })
 );
 
-app.use(express.json());
-app.use(bodyParser.json());
-
 // Подключение к базе данных
-const db = mysql.createConnection({
+const sequelize = new Sequelize("MT", "root", "", {
   host: "localhost",
-  user: "root",
-  password: "",
-  database: "MT",
+  dialect: "mysql",
 });
 
-db.connect((err) => {
-  if (err) {
-    console.error("Ошибка подключения к базе данных:", err);
-  } else {
-    console.log("Подключено к базе данных MySQL");
-  }
+const User = sequelize.define("User", {
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+    validate: {
+      isEmail: true,
+    },
+  },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  token_admin: {
+    type: DataTypes.INTEGER,
+    defaultValue: 1,
+  },
+}, {
+  timestamps: false, // Отключает createdAt и updatedAt
 });
+
+const Question = sequelize.define("Question", {
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  phone: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    validate: {
+      isEmail: true, // Проверка, что это корректный email
+    },
+  },
+  description: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+}, {
+  timestamps: false, // Отключаем создание полей createdAt и updatedAt
+});
+// Подключение к базе данных
+sequelize
+  .authenticate()
+  .then(() => {
+    console.log("Успешное подключение к базе данных.");
+  })
+  .catch((err) => {
+    console.error("Ошибка подключения к базе данных:", err);
+  });
+
+// Синхронизация модели с базой данных
+sequelize.sync();
 
 // Маршрут для регистрации пользователей
 app.post("/api/register", async (req, res) => {
@@ -49,113 +95,67 @@ app.post("/api/register", async (req, res) => {
     return res.status(400).json({ message: "Пожалуйста, заполните все поля" });
   }
 
-  const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  if (!emailPattern.test(email)) {
-    return res
-      .status(400)
-      .json({ message: "Пожалуйста, введите корректный email" });
-  }
-
-  db.query(
-    "SELECT * FROM users WHERE email = ?",
-    [email],
-    async (err, results) => {
-      if (err) {
-        return res
-          .status(500)
-          .json({ message: "Ошибка при проверке email", error: err });
-      }
-
-      if (results.length > 0) {
-        return res
-          .status(400)
-          .json({ message: "Этот email уже зарегистрирован" });
-      }
-
-      try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const query =
-          "INSERT INTO users (email, password, token_admin) VALUES (?, ?, 1)";
-        db.query(query, [email, hashedPassword], (err, result) => {
-          if (err) {
-            console.error("Ошибка при добавлении в базу:", err);
-            return res.status(500).json({
-              message: "Ошибка при добавлении данных в базу",
-              error: err,
-            });
-          }
-          console.log("Результат запроса:", result); // Логируем результат запроса в базу
-          console.log("Добавлен новый пользователь с email:", email); // Логируем email добавленного пользователя
-          console.log("Токен администратора:", 1);
-
-          res.status(200).json({ message: "Регистрация прошла успешно" });
-        });
-      } catch (err) {
-        return res
-          .status(500)
-          .json({ message: "Ошибка при хэшировании пароля", error: err });
-      }
+  try {
+    const emailExists = await User.findOne({ where: { email } });
+    if (emailExists) {
+      return res.status(400).json({ message: "Этот email уже зарегистрирован" });
     }
-  );
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = await User.create({ email, password: hashedPassword });
+
+    console.log("Добавлен новый пользователь:", newUser);
+    res.status(200).json({ message: "Регистрация прошла успешно" });
+  } catch (err) {
+    console.error("Ошибка при регистрации пользователя:", err);
+    res.status(500).json({ message: "Ошибка сервера", error: err });
+  }
 });
 
 // Маршрут для авторизации пользователей и администратора
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ message: "Пожалуйста, заполните все поля" });
   }
 
-  db.query(
-    "SELECT * FROM users WHERE email = ?",
-    [email],
-    async (err, results) => {
-      if (err) {
-        return res
-          .status(500)
-          .json({ message: "Ошибка при проверке пользователя", error: err });
-      }
+  try {
+    const user = await User.findOne({ where: { email } });
 
-      if (results.length === 0) {
-        return res.status(400).json({ message: "Неверный email или пароль" });
-      }
-
-      const user = results[0];
-
-      // Проверяем пароль
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      if (!isPasswordValid) {
-        return res.status(400).json({ message: "Неверный email или пароль" });
-      }
-
-      // Генерируем JWT токен
-      const token = jwt.sign(
-        {
-          id: user.id,
-          email: user.email,
-          token_admin: user.token_admin, // Роль пользователя
-        },
-        SECRET_KEY,
-        { expiresIn: "1y" } // Время жизни токена
-      );
-
-      res.status(200).json({
-        message: "Авторизация успешна",
-        token,
-        token_admin: user.token_admin,
-        role: user.token_admin === 2 ? "admin" : "user",
-      });
-
-      console.log(`Токен:`, token);
-      console.log(`почта`, email);
-      console.log(
-        `Роль пользователя: ${
-          user.token_admin == 2 ? "Администратор" : "Пользователь"
-        }`
-      );
+    if (!user) {
+      return res.status(400).json({ message: "Неверный email или пароль" });
     }
-  );
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(400).json({ message: "Неверный email или пароль" });
+    }
+
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        token_admin: user.token_admin,
+      },
+      SECRET_KEY,
+      { expiresIn: "1y" }
+    );
+
+    res.status(200).json({
+      message: "Авторизация успешна",
+      token,
+      token_admin: user.token_admin,
+    });
+
+    console.log(`Токен:`, token);
+    console.log(`почта`, email);
+    console.log(`Роль пользователя: ${user.token_admin == 2 ? 'Администратор' : 'Пользователь'}`);
+
+  } catch (err) {
+    console.error("Ошибка при авторизации:", err);
+    res.status(500).json({ message: "Ошибка сервера", error: err });
+  }
 });
 
 // Маршрут для проверки администратора
@@ -191,31 +191,31 @@ router.post("/admin", (req, res) => {
     }`
   );
 });
-
-router.post("/check-email", (req, res) => {
+// проверка почты для сброса пароля
+router.post("/check-email", async (req, res) => {
   const { email } = req.body;
 
   if (!email) {
     return res.status(400).json({ message: "Email не предоставлен." });
   }
 
-  db.query("SELECT * FROM users WHERE email = ?", [email], (err, results) => {
-    if (err) {
-      return res.status(500).json({ message: "Ошибка сервера.", error: err });
-    }
+  try {
+    // Используем метод findOne для поиска пользователя по email
+    const user = await User.findOne({ where: { email } });
 
-    if (results.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "Email не найден.", exists: false });
+    if (!user) {
+      return res.status(404).json({ message: "Email не найден.", exists: false });
     }
 
     return res.status(200).json({ message: "Email найден.", exists: true });
-  });
+  } catch (error) {
+    console.error("Ошибка при проверке email:", error);
+    return res.status(500).json({ message: "Ошибка сервера.", error });
+  }
 });
 
 //изменение пароля
-router.post("/change-password", (req, res) => {
+router.post("/change-password", async (req, res) => {
   const { email, password } = req.body;
 
   try {
@@ -233,43 +233,22 @@ router.post("/change-password", (req, res) => {
     }
 
     // Проверяем, существует ли пользователь с указанным email
-    db.query("SELECT * FROM users WHERE email = ?", [email], (err, results) => {
-      if (err) {
-        return res
-          .status(500)
-          .json({ message: "Ошибка при проверке пользователя", error: err });
-      }
+    const user = await User.findOne({ where: { email } });
 
-      if (results.length === 0) {
-        return res
-          .status(400)
-          .json({ message: "Пользователь с указанным email не найден." });
-      }
+    if (!user) {
+      return res
+        .status(400)
+        .json({ message: "Пользователь с указанным email не найден." });
+    }
 
-      // Хэшируем новый пароль
-      bcrypt.hash(password, 10, (err, hashedPassword) => {
-        if (err) {
-          return res
-            .status(500)
-            .json({ message: "Ошибка при хэшировании пароля", error: err });
-        }
+    // Хэшируем новый пароль
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Обновляем пароль в базе данных
-        db.query(
-          "UPDATE users SET password = ? WHERE email = ?",
-          [hashedPassword, email],
-          (err, result) => {
-            if (err) {
-              return res
-                .status(500)
-                .json({ message: "Ошибка при обновлении пароля", error: err });
-            }
+    // Обновляем пароль в базе данных
+    user.password = hashedPassword;
+    await user.save();
 
-            res.status(200).json({ message: "Пароль успешно изменен." });
-          }
-        );
-      });
-    });
+    res.status(200).json({ message: "Пароль успешно изменен." });
   } catch (err) {
     console.error("Ошибка на сервере:", err);
     res
@@ -281,7 +260,7 @@ router.post("/change-password", (req, res) => {
 //форма отправки вопросов клиентов
 
 // Маршрут для отправки вопросов клиентов
-router.post("/questions", (req, res) => {
+router.post("/questions", async (req, res) => {
   const { name, phone, email, description } = req.body;
 
   if (!name || !phone || !email || !description) {
@@ -294,51 +273,55 @@ router.post("/questions", (req, res) => {
     return res.status(400).json({ message: "Пожалуйста, введите корректный email" });
   }
 
-  // Запрос на вставку данных в таблицу вопросов
-  const query = "INSERT INTO questions (name, phone, email, description) VALUES (?, ?, ?, ?)";
-  db.query(query, [name, phone, email, description], (err, results) => {
-    if (err) {
-      console.error("Ошибка при сохранении данных:", err);
-      return res.status(500).json({ message: "Ошибка сервера" });
-    }
+  try {
+    // Создаем новую запись в таблице вопросов
+    const newQuestion = await Question.create({
+      name,
+      phone,
+      email,
+      description,
+    });
 
     // Если запрос выполнен успешно, отправляем ответ с успешным результатом
-    res.status(201).json({ message: "Данные успешно сохранены", id: results.insertId });
-  });
+    res.status(201).json({ message: "Данные успешно сохранены", id: newQuestion.id });
+  } catch (err) {
+    console.error("Ошибка при сохранении данных:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
 });
 
 //вывод пользователей
-router.get("/users", (req, res) => {
-  // Запрос к базе данных для получения всех пользователей
-  db.query(
-    "SELECT id, email, token_admin, created_at FROM users",
-    (err, results) => {
-      if (err) {
-        console.error("Ошибка при получении данных пользователей:", err);
-        return res.status(500).json({ message: "Ошибка сервера" });
-      }
+router.get("/users", async (req, res) => {
+  try {
+    // Извлекаем всех пользователей, выбираем нужные поля
+    const users = await User.findAll({
+      attributes: ['id', 'email', 'token_admin'], // Поля, которые нужно вернуть
+    });
 
-      // Отправляем список пользователей на клиентскую часть
-      res.status(200).json({ users: results });
-    }
-  );
+    // Отправляем список пользователей
+    res.status(200).json({ users });
+  } catch (err) {
+    console.error("Ошибка при получении данных пользователей:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
 });
-
 // вывод вопросов пользователей
-router.get("/question", (req, res) => {
-  db.query(
-    "SELECT id, name, email, phone, description, created_at FROM questions",
-    (err, results) => {
-      if (err) {
-        console.error("Ошибка при получении данных из questions:", err);
-        return res.status(500).json({
-          message: "Ошибка при получении данных",
-          error: err,
-        });
-      }
-      res.status(200).json({ questions: results });
-    }
-  );
+router.get("/question", async (req, res) => {
+  try {
+    // Извлекаем все вопросы с необходимыми полями
+    const questions = await Question.findAll({
+      attributes: ['id', 'name', 'email', 'phone', 'description'], // Поля, которые нужно вернуть
+    });
+
+    // Отправляем список вопросов
+    res.status(200).json({ questions });
+  } catch (err) {
+    console.error("Ошибка при получении данных из questions:", err);
+    res.status(500).json({
+      message: "Ошибка при получении данных",
+      error: err,
+    });
+  }
 });
 
 app.use("/api", router);
